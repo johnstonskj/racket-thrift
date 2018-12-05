@@ -32,4 +32,4 @@ new language bindings}.
 
 @section{License}
 
-@verbatim|{|@file->string["../LICENSE"]}|
+@verbatim|{|@file->string["LICENSE"]}|
