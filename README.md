@@ -8,18 +8,15 @@
 [![GitHub stars](https://img.shields.io/github/stars/johnstonskj/racket-thrift.svg)](https://github.com/johnstonskj/racket-thrift/stargazers)
 ![mit License](https://img.shields.io/badge/license-mit-118811.svg)
 
-This package provides an implementation of basic read (write coming eventually) capabilities for Apache Parquet files. Parquet is a commonly used format in cloud-native systems, the Hadoop ecosystem and machine learning applications.
-
-[![Apache Parquet](https://raw.githubusercontent.com/johnstonskj/racket-thrift/master/thrift/scribblings/thrift_logo.png)](https://thrift.apache.org)
+This package provides an implementation of the core for Apache Thrift. While not a complete implementation of all the required and recommended capabilities it is reasonably complete.
 
 ## Modules
 
 * `thrift` - Common type definitions for the Thrift stack.
-* `thrift/idl/generator` - Generate Racket modules based upon an IDL.
-* `thrift/idl/language` - Racket syntax for defining IDLs in Racket.
-* `thrift/protocol/plain` - The plain binary protocol.
-* `thrift/protocol/compact` - The compact binary protocol.
-* `thrift/transport/file` - A File transport.
+* `thrift/idl/*` - A Racket syntax for defining Thrift IDL in-line, and to generate Racket modules based upon an IDL.
+* `thrift/processor/*` - Implementations for common processor types..
+* `thrift/protocol/*` - Implementations for core protocol types.
+* `thrift/transport/*` - Implementations for core protocol types.
 
 ## Command Line Launchers
 
@@ -27,20 +24,43 @@ This package provides an implementation of basic read (write coming eventually) 
 
 ## Example
 
-```scheme
-(require thrift/file
-         thrift/generated/thrift
-         thrift/transport/common)
+```racket
+(require thrift/protocol/compact
+         thrift/transport/memory)
 
-(define tport (open-input-thrift-file "../test-data/nation.impala.thrift"))
-(define metadata (read-metadata tport))
+(define t (open-output-memory-transport))
+(define p (encoder t))
 
-(displayln (format "File Metadata: ~a, Version: ~a, Num Rows: ~a"
-                   (transport-source tport)
-                   (file-metadata-version metadata)
-                   (file-metadata-num-rows metadata)))
+((encoder-message-begin p) (message-header "mthod" 7 9))
 
-(close-thrift-file tport)
+((encoder-struct-begin p) "mthod_args")
+
+((encoder-field-begin p) (field-header "name" type-string 1))
+((encoder-string p) "simon")
+((encoder-field-end p))
+
+((encoder-field-begin p) (field-header "age" type-byte 2))
+((encoder-byte p) 48)
+((encoder-field-end p))
+
+((encoder-field-begin p) (field-header "brilliant?" type-bool 3))
+((encoder-boolean p) #f)
+((encoder-field-end p))
+
+((encoder-struct-end p))
+
+((encoder-map-begin p) (map-header type-string type-int32 3))
+((encoder-string p) "first")
+((encoder-int32 p) 101)
+((encoder-string p) "second")
+((encoder-int32 p) 102)
+((encoder-string p) "third")
+((encoder-int32 p) 103)
+((encoder-map-end p))
+ 
+((encoder-message-end p))
+
+(write (transport-output-bytes t))
 ```
 
 ## Installation
@@ -53,10 +73,5 @@ This package provides an implementation of basic read (write coming eventually) 
 ## History
 
 * **1.0** - Initial Stable Version
-  * Thrift IDL and generator working for types and decoding functions.
-  * Thrift compact protocol working for read.
-  * Thrift file transport working for read.
-  * Parquet file reader and launcher working for metadata only.
-* **0.1** - Initial (Unstable) Version
 
 [![Racket Language](https://raw.githubusercontent.com/johnstonskj/racket-scaffold/master/scaffold/plank-files/racket-lang.png)](https://racket-lang.org/)
