@@ -4,7 +4,7 @@
 [![Travis Status](https://travis-ci.org/johnstonskj/racket-thrift.svg)](https://www.travis-ci.org/johnstonskj/racket-thrift)
 [![Coverage Status](https://coveralls.io/repos/github/johnstonskjracket-/thrift/badge.svg?branch=master)](https://coveralls.io/github/johnstonskj/racket-thrift?branch=master)
 [![raco pkg install thrift](https://img.shields.io/badge/raco%20pkg%20install-thrift-blue.svg)](http://pkgs.racket-lang.org/package/thrift)
-[![Documentation](https://img.shields.io/badge/raco%20docs-rml--core-blue.svg)](http://docs.racket-lang.org/thrift/index.html)
+[![Documentation](https://img.shields.io/badge/raco%20docs-thrift-blue.svg)](http://docs.racket-lang.org/thrift/index.html)
 [![GitHub stars](https://img.shields.io/github/stars/johnstonskj/racket-thrift.svg)](https://github.com/johnstonskj/racket-thrift/stargazers)
 ![mit License](https://img.shields.io/badge/license-mit-118811.svg)
 
