@@ -14,6 +14,7 @@
 (define deps '(
   "base"
   "http"
+  "unix-socket-lib"
   "rackunit-lib"
   "racket-index"))
 (define build-deps '(
