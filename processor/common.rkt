@@ -20,4 +20,7 @@
   (-> input-transport? output-transport? boolean?))
 
 (define protocol-processor/c
-  (-> decoder? encoder? boolean?))
+  (-> protocol% protocol% boolean?))
+
+;(define multiplexed-protocol-processor/c
+;  (-> multiplexed-protocol% multiplexed-protocol% boolean?))

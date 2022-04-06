@@ -10,7 +10,8 @@
 
 ;; ---------- Requirements
 
-(require racket/list
+(require racket/class
+         racket/list
          racket/struct
          thrift
          thrift/private/logging)
@@ -18,58 +19,58 @@
 ;; ---------- Implementation
 
 (define (type-bool/decode decoder)
-  ((decoder-boolean decoder)))
+  (send decoder read-boolean))
 
 (define (type-bool/decode-list decoder)
   (decode-a-list decoder type-bool/decode))
 
 (define (type-byte/decode decoder)
-  ((decoder-byte decoder)))
+  (send decoder read-byte))
 
 (define (type-byte/decode-list decoder)
   (decode-a-list decoder type-byte/decode))
 
+(define (type-binary/decode decoder)
+  (send decoder read-bytes))
+
+(define (type-binary/decode-list decoder)
+  (decode-a-list decoder type-binary/decode))
+
 (define (type-int16/decode decoder)
-  ((decoder-int16 decoder)))
+  (send decoder read-int16))
 
 (define (type-int16/decode-list decoder)
   (decode-a-list decoder type-int16/decode))
 
 (define (type-int32/decode decoder)
-  ((decoder-int32 decoder)))
+  (send decoder read-int32))
 
 (define (type-int32/decode-list decoder)
   (decode-a-list decoder type-int32/decode))
 
 (define (type-int64/decode decoder)
-  ((decoder-int64 decoder)))
+  (send decoder read-int64))
 
 (define (type-int64/decode-list decoder)
   (decode-a-list decoder type-int64/decode))
 
 (define (type-double/decode decoder)
-  ((decoder-double decoder)))
+  (send decoder read-double))
 
 (define (type-double/decode-list decoder)
   (decode-a-list decoder type-double/decode))
 
 (define (type-string/decode decoder)
-  ((decoder-string decoder)))
+  (send decoder read-string))
 
 (define (type-string/decode-list decoder)
   (decode-a-list decoder type-string/decode))
 
-(define (type-binary/decode decoder)
-  ((decoder-bytes decoder)))
-
-(define (type-binary/decode-list decoder)
-  (decode-a-list decoder type-binary/decode))
-
 (define (decode-a-list decoder element-decoder)
   (log-thrift-debug "decoding a list of ~a" (object-name element-decoder))
-  (define header ((decoder-list-begin decoder)))
+  (define header (send decoder read-list-begin))
   (define the-list
-    (for/list ([element (range (list-or-set-length header))])
+    (for/list ([element (range (list-header-length header))])
       (cond
         [(= (procedure-arity element-decoder) 0)
          (element-decoder)]
@@ -77,7 +78,7 @@
          (element-decoder decoder)]
         [else
          (error "invalid decoder function: " (object-name element-decoder))])))
-  ((decoder-list-end decoder))
+  (send decoder read-list-end)
   the-list)
 
 (define (decode-a-union decoder constructor struct-schema)
@@ -94,13 +95,13 @@
 ; schema : hash/c exact-nonnegative-integer? thrift-field
 (define (decode-a-struct decoder constructor struct-schema)
   (log-thrift-debug "decoding a structure of ~a" (object-name constructor))
-  ((decoder-struct-begin decoder))
+  (send decoder read-struct-begin)
   (define result (make-vector (hash-count struct-schema) 'no-value))
   
-  (let next-field ([field ((decoder-field-begin decoder))])
+  (let next-field ([field (send decoder read-field-begin)])
     (cond
       [(= (field-header-type field) field-stop-value)
-       ((decoder-field-end decoder))]
+       (send decoder read-field-end)]
       [else
        ;; TODO: handle booleans separately
        (define schema (hash-ref struct-schema (field-header-id field)))
@@ -119,8 +120,8 @@
                          (thrift-field-name schema)
                          value)
        (vector-set! result (thrift-field-position schema) value)
-       ((decoder-field-end decoder))
-       (next-field ((decoder-field-begin decoder)))]))
+       (send decoder read-field-end)
+       (next-field (send decoder read-field-begin))]))
 
   (for ([(id schema) struct-schema])
     (when (and
@@ -131,7 +132,7 @@
                      (thrift-field-name schema)
                      (object-name constructor)))))
   
-  ((decoder-struct-end decoder))
+  (send decoder read-struct-end)
   (apply constructor (vector->list result)))
 
 ;; ---------- Internal procedures

@@ -19,6 +19,7 @@
 ;; ---------- Requirements
 
 (require racket/bool
+         racket/class
          racket/tcp
          racket/udp
          racket/unix-socket
@@ -38,6 +39,7 @@
          (error "AF_UNIX sockets not available"))
        (unix-socket-connect hostname)]
       [else (error "unknown protocol: " protocol)]))
+  (define source (if (false? port-no) hostname (format "~a:~a" hostname port-no)))
   (values
-   (transport "in-socket" 'unix-socket inp)
-   (transport "out-socket" 'unix-socket inp)))
+   (make-object transport% "in-socket" source inp)
+   (make-object transport% "out-socket" source inp)))

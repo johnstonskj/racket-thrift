@@ -9,163 +9,162 @@
 
 (provide
  
- (contract-out
+ transport%
 
-  [transport?
-   (-> any/c boolean?)]
+ positional-transport%
 
-  [transport-source
-   (-> transport? (or/c symbol? string?))]
+ transport?
 
-  [transport-port
-   (-> transport? port?)]
+ positional-transport?
 
-  [transport-peek
-   (-> transport? byte?)]
-  
-  [transport-read-byte
-   (-> transport? byte?)]
-  
-  [transport-read-bytes
-   (-> transport? exact-positive-integer? bytes?)]
-  
-  [transport-read
-   (-> transport? any/c)]
-  
-  [transport-write-byte
-   (-> transport? byte? void?)]
-  
-  [transport-write-bytes
-   (->* (transport? bytes?) (exact-nonnegative-integer? exact-nonnegative-integer?) void?)]
-  
-  [transport-write
-   (-> transport? any/c void?)]
-  
-  [transport-size
-   (-> transport? (or/c exact-nonnegative-integer? eof-object?))]
+ input-transport?
 
-  [transport-read-position
-   (->* (transport?) (exact-nonnegative-integer?) (or/c exact-nonnegative-integer? eof-object?))]
-
-  [input-transport?
-   (-> transport? boolean?)]
-  
-  [output-transport?
-   (-> transport? boolean?)]
-
-  [flush-transport
-   (-> output-transport? void?)]
-  
-  [close-transport
-   (-> transport? any/c)])
- 
- transport)
+ output-transport?)
 
 ;; ---------- Requirements
 
-(require racket/bool
+(require (prefix-in base: racket/base)
+         racket/bool
+         racket/class
          racket/struct
-         thrift/common
-         thrift/private/transport)
+         thrift/transport/exn-common)
 
-;; ---------- Implementation
+;; ---------- Implementation (Classes)
 
-(define (transport-read-byte tport)
-  (define actual (get-wrapped-func tport 0))
-  (if (false? actual)
-      (read-byte (transport-port tport))
-      (actual tport)))
-  
-(define (transport-read-bytes tport amt)
-  (define actual (get-wrapped-func tport 1))
-  (if (false? actual)
-      (read-bytes amt (transport-port tport))
-      (actual tport amt)))
-  
-(define (transport-read tport)
-  (define actual (get-wrapped-func tport 2))
-  (if (false? actual)
-      (read (transport-port tport))
-      (actual tport)))
+(define transport%
 
-(define (transport-size tport)
-  (cond
-    [(input-transport? tport)
-     (define actual (get-wrapped-func tport 3))
-     (if (false? actual)
-         (file-size (transport-source tport))
-         (actual tport))]
-    [else eof]))
+  (class object%
 
-(define (transport-read-position tport [new-pos #f])
-  (define actual (get-wrapped-func tport 4))
-  (define position (if (false? actual) file-position actual))
-  (cond
-    [(input-transport? tport)
-     (cond
-       [(false? new-pos)
-        (position (transport-port tport))]
-       [else
-        (position (transport-port tport) new-pos)
-        new-pos])]
-    [else eof]))
+    (init-field name source port)
 
-(define (transport-peek tport)
-  (define actual (get-wrapped-func tport 5))
-  (if (false? actual)
-      (peek-byte (transport-port tport))
-      (actual tport)))
-  
-(define (transport-write-byte tport b)
-  (define actual (get-wrapped-func tport 0))
-  (if (false? actual)
-      (write-byte b (transport-port tport))
-      (actual tport b)))
-  
-(define (transport-write-bytes tport bs [start 0] [end #f])
-  (define the-end (if (false? end) (bytes-length bs) end))
-  (define actual (get-wrapped-func tport 1))
-  (if (false? actual)
+    (super-new)
+
+    (define/public (read-byte)
+      (check-input-port port)
+      (base:read-byte port))
+
+    (define/public (read-bytes count)
+      (check-input-port port)
+      (base:read-bytes count port))
+
+    (define/public (read)
+      (check-input-port port)
+      (base:read port))
+
+    (define/public (peek)
+      (check-input-port port)
+      (base:peek-byte port))
+    
+    (define/public (available?)
+      (check-input-port port)
+      (base:byte-ready? port))
+    
+    (define/public (write-byte b)
+      (check-output-port port)
+      (base:write-byte b port))
+
+    (define/public (write-bytes bs [start 0] [end #f])
+      (check-output-port port)
       (if (false? end)
-          (write-bytes bs (transport-port tport) start)
-          (write-bytes bs (transport-port tport) start end))
-      (actual tport bs start end))
-  (void))
+          (base:write-bytes bs port start)
+          (base:write-bytes bs port start end)))
+
+    (define/public (write v)
+      (check-output-port port)
+      (base:write v port))
+
+    (define/public (flush)
+      (check-output-port port)
+      (base:flush-output port))
+    
+    (define/public (close)
+      (cond
+        [(input-port? port)
+         (base:close-input-port port)]
+        [(port? port)
+         (send this flush)
+         (base:close-output-port port)]
+        [else (error "not a port?")]))
+    
+    (define/public (input?)
+      (base:input-port? port))
+
+    (define/public (closed?)
+      (base:port-closed? port))))
+
+
+(define positional-transport%
+
+  (class transport%
+
+    (super-new)
+
+    (define/public (length)
+      (cond
+        [(file-stream-port? (get-field port this))
+         (file-size (get-field source this))]
+        [else
+         #f]))
+
+    (define/public (position)
+      (file-position (get-field port this)))
+
+    (define/public (set-position! pos)
+      (file-position (get-field port this) pos))))
+
+;; ---------- Implementation (Procedures)
+
+(define (transport? v)
+  (is-a? v transport%))
   
-(define (transport-write tport v)
-  (define actual (get-wrapped-func tport 2))
-  (if (false? actual)
-      (write v (transport-port tport))
-      (actual (transport-port tport) v)))
+(define (positional-transport? v)
+  (is-a? v positional-transport%))
   
-(define (flush-transport tport)
-  (define actual (get-wrapped-func tport 3))
-  (if (false? actual)
-      (flush-output (transport-port tport))
-      (actual tport)))
-
-(define (input-transport? tport)
-  (input-port? (transport-port tport)))
-
-(define (output-transport? tport)
-  (output-port? (transport-port tport)))
-
-(define (close-transport tport)
-  (define p (if (wrapped-transport? tport)
-                (transport-port (wrapped-transport-wrapped tport))
-                (transport-port tport)))
-  (cond
-    [(input-port? p)
-     (close-input-port p)]
-    [(output-port? p)
-     (flush-transport tport)
-     (close-output-port p)]
-    [else (error "what kind of port is this? " p)]))
-
+(define (input-transport? v)
+  (and (is-a? v transport%)
+       (send v input?)))
+  
+(define (output-transport? v)
+  (and (is-a? v transport%)
+       (not (send v input?))))
+  
 ;; ---------- Internal procedures
 
-(define (get-wrapped-func tport findex)
-  (cond
-    [(wrapped-transport? tport)
-     (list-ref (struct->list (wrapped-transport-intercept tport)) findex)]
-    [else #f]))
+(define (check-input-port port)
+  (unless (and (input-port? port)
+               (not (port-closed? port)))
+    (raise (not-open-for-input (current-continuation-marks)))))
+
+(define (check-output-port port)
+  (unless (and (port? port)
+               (not (input-port? port))
+               (not (port-closed? port)))
+    (raise (not-open-for-output (current-continuation-marks)))))
+
+;; ---------- Internal tests
+
+(module+ test
+  (require rackunit)
+  (define out-port (open-output-bytes))
+  (define out-transport (make-object transport% "test" 'test-write out-port))
+  (check-equal? (send out-transport input?) #f)
+  (check-equal? (send out-transport closed?) #f)
+  (send out-transport write-byte 2)
+  (send out-transport write-byte 4)
+  (send out-transport write-byte 8)
+  (check-equal? (send out-transport write-bytes #"ABCDEF") 6)
+  (send out-transport write "hello world")
+  (send out-transport flush)
+  (send out-transport close)
+  (check-equal? (send out-transport closed?) #t)
+  (define in-port (open-input-bytes (get-output-bytes out-port)))
+  (define in-transport (make-object transport% "test" 'test-read in-port))
+  (check-equal? (send in-transport input?) #t)
+  (check-equal? (send in-transport closed?) #f)
+  (check-equal? (send in-transport read-byte) 2)
+  (check-equal? (send in-transport read-byte) 4)
+  (check-equal? (send in-transport read-byte) 8)
+  (check-equal? (send in-transport read-bytes 6) #"ABCDEF")
+  (check-equal? (send in-transport read) "hello world")
+  (send in-transport close)
+  (check-equal? (send in-transport closed?) #t))

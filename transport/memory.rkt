@@ -22,15 +22,18 @@
 
 ;; ---------- Requirements
 
-(require thrift/transport/common)
+(require racket/class
+         thrift/transport/common)
 
 ;; ---------- Implementation
 
+(define *transport-name* "in-memory")
+
 (define (open-input-memory-transport bytes)
-  (transport "in-memory" 'memory (open-input-bytes bytes)))
+  (make-object transport% *transport-name* 'memory (open-input-bytes bytes)))
 
 (define (open-output-memory-transport)
-  (transport "in-memory" 'memory (open-output-bytes)))
+  (make-object transport% *transport-name* 'memory (open-output-bytes)))
 
 (define (transport-output-bytes tport)
-  (get-output-bytes (transport-port tport)))
+  (get-output-bytes (get-field port tport)))

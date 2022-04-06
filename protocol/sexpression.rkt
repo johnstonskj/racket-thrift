@@ -8,25 +8,18 @@
 (require racket/contract)
 
 (provide
-
- (contract-out
-  
-  [make-sexpression-encoder
-   (-> transport? (or/c encoder? #f))]
-  
-  [make-sexpression-decoder
-   (-> transport? (or/c decoder? #f))]))
+ 
+ make-s-expression-protocol)
 
 ;; ---------- Requirements
 
-(require thrift
+(require racket/class
          thrift/protocol/common
          thrift/protocol/exn-common
-         thrift/private/enumeration
-         thrift/private/protocol
+         thrift/transport/common
          thrift/private/logging)
 
-;; ---------- Implementation
+;; ---------- Internal types
 
 (define *protocol*
   (protocol-id "s-expression" 0 1))
@@ -41,102 +34,135 @@
    version
    message-header) #:prefab)
 
-(define (make-sexpression-encoder transport)
-  (encoder
-   (protocol-id-string *protocol*)
-   (λ (header) (write-message-begin transport header))
-   (λ () (flush-message-end transport)) 
-   (λ (name) (no-op-encoder "struct-begin"))
-   (λ () (no-op-encoder "struct-end"))
-   (λ (header) (write-value transport header))
-   (λ () (no-op-encoder "field-end"))
-   (λ () (no-op-encoder "field-stop"))
-   (λ (header) (write-value transport header))
-   (λ () (no-op-encoder "map-end"))
-   (λ (header) (write-value transport header))
-   (λ () (no-op-encoder "list-end"))
-   (λ (header) (write-value transport header))
-   (λ () (no-op-decoder "set-end"))
-   (λ (v) (write-value transport v))
-   (λ (v) (write-value transport v))
-   (λ (v) (write-value transport v))
-   (λ (v) (write-value transport v))
-   (λ (v) (write-value transport v))
-   (λ (v) (write-value transport v))
-   (λ (v) (write-value transport v))
-   (λ (v) (write-value transport v))))
+;; ---------- Implementation
 
-(define (make-sexpression-decoder transport)
-  (decoder
-   (protocol-id-string *protocol*)
-   (λ () (read-message-begin transport))
-   (λ () (no-op-decoder "message-end"))
-   (λ () (no-op-decoder "struct-begin"))
-   (λ () (no-op-decoder "struct-end"))
-   (λ () (read-value transport field-header?))
-   (λ () (no-op-decoder "field-end"))
-   (λ () (no-op-decoder "field-stop"))
-   (λ () (read-value transport map-header?))
-   (λ () (no-op-decoder "map-end"))
-   (λ () (read-value transport list-or-set?))
-   (λ () (no-op-decoder "list-end"))
-   (λ () (read-value transport list-or-set?))
-   (λ () (no-op-decoder "set-end"))
-   (λ () (read-value transport boolean?))
-   (λ () (read-value transport byte?))
-   (λ () (read-value transport bytes?))
-   (λ () (read-value transport integer?))
-   (λ () (read-value transport integer?))
-   (λ () (read-value transport integer?))
-   (λ () (read-value transport flonum?))
-   (λ () (read-value transport string?))))
-
-;; ---------- Internal procedures
-
-(define inter-expression-space #\space)
-
-(define (write-message-begin tport header)
-  (log-thrift-debug "~a:write-message-begin: ~a" (protocol-id-string *protocol*) header)
-  (write-value tport
-               (protocol-header (protocol-id-string *protocol*)
-                                (protocol-id-version *protocol*)
-                                header))
-  (flush-transport tport))
-
-(define (read-message-begin tport)
-  (log-thrift-debug "~a:read-message-begin" (protocol-id-string *protocol*))
-  (define header (read-value tport protocol-header?))
-  (when (not (equal? (protocol-header-id header) (protocol-id-string *protocol*)))
-     (log-thrift-error "value ~s, invalid, expecting ~a"
-                       (protocol-header-id header) 's-expression)
-    (raise (invalid-protocol-id (current-continuation-marks) (protocol-header-id header))))
-  (when (not (equal? (protocol-header-version header) 1))
-     (log-thrift-error "value ~s, invalid, expecting ~a"
-                       (protocol-header-version header) 1)
-    (raise (invalid-protocol-version (current-continuation-marks) (protocol-header-version header))))
-  (when (not (message-header? (protocol-header-message-header header)))
-     (log-thrift-error "~s, invalid, expecting a message header"
-                       (protocol-header-message-header header))
-    (raise (decoding-error (current-continuation-marks) (protocol-header-message-header header))))
-  (protocol-header-message-header header))
+(define s-expression-protocol%
   
-(define (write-value tport v)
-  (log-thrift-debug "~a:write-value: ~a" (protocol-id-string *protocol*) v)
-  (transport-write tport v)
-  (write-char inter-expression-space (transport-port tport)))
+  (class protocol%
 
-(define (read-value tport type-predicate?)
-  (log-thrift-debug "~a:read-value" (protocol-id-string *protocol*))
-  (define v (transport-read tport))
-  (cond
-    [(type-predicate? v)
-     (define spacer (read-char (transport-port tport)))
-     (cond
-       [(equal? spacer inter-expression-space)
-        v]
-       [else
-        (log-thrift-error "unexpected spacer: ~a" spacer)
-        (raise (decoding-error (current-continuation-marks) spacer))])]
-    [else
-     (log-thrift-error "~a not-a ~a" v type-predicate?)
-     (raise (invalid-value-type (current-continuation-marks) v))]))
+    (super-new [identity *protocol*])
+
+    (inherit-field input-transport
+                   output-transport)
+    
+    (define inter-expression-space #\space)
+
+    (define/augment (write-message-begin message)
+      (write-value
+       (protocol-header (protocol-id-string *protocol*)
+                        (protocol-id-version *protocol*)
+                        message)))
+
+    (define/augment (write-struct-begin name)
+      (write-value name))
+    
+    (define/augment (write-map-begin header)
+      (write-value header))
+    
+    (define/augment (write-list-begin header)
+      (write-value header))
+    
+    (define/augment (write-set-begin header)
+      (write-value header))
+    
+    (define/augment (write-boolean value)
+      (write-value value))
+    
+    (define/augment (write-byte value)
+      (write-value value))
+    
+    (define/augment (write-bytes value)
+      (write-value value))
+    
+    (define/augment (write-int16 value)
+      (write-value value))
+    
+    (define/augment (write-int32 value)
+      (write-value value))
+    
+    (define/augment (write-int64 value)
+      (write-value value))
+    
+    (define/augment (write-double value)
+      (write-value value))
+    
+    (define/augment (write-string value)
+      (write-value value))
+
+    (define/augment (read-message-begin)
+      (define header (read-value protocol-header?))
+      (when (not (equal? (protocol-header-id header) (protocol-id-string *protocol*)))
+        (log-thrift-error "value ~s, invalid, expecting ~a"
+                          (protocol-header-id header) 's-expression)
+        (raise (invalid-protocol-id (current-continuation-marks) (protocol-header-id header))))
+      (when (not (equal? (protocol-header-version header) 1))
+        (log-thrift-error "value ~s, invalid, expecting ~a"
+                          (protocol-header-version header) 1)
+        (raise (invalid-protocol-version (current-continuation-marks) (protocol-header-version header))))
+      (when (not (message-header? (protocol-header-message-header header)))
+        (log-thrift-error "~s, invalid, expecting a message header"
+                          (protocol-header-message-header header))
+        (raise (decoding-error (current-continuation-marks) (protocol-header-message-header header))))
+      (protocol-header-message-header header))
+
+    (define/augment (read-struct-begin)
+      (read-value string?))
+    
+    (define/augment (read-field-begin)
+      (read-value field-header?))
+    
+    (define/augment (read-map-begin)
+      (read-value map-header?))
+    
+    (define/augment (read-list-begin)
+      (read-value list-header?))
+    
+    (define/augment (read-set-begin)
+      (read-value list-header?))
+    
+    (define/augment (read-boolean)
+      (read-value boolean?))
+    
+    (define/augment (read-byte)
+      (read-value byte?))
+    
+    (define/augment (read-bytes)
+      (read-value bytes?))
+    
+    (define/augment (read-int16)
+      (read-value integer?))
+    
+    (define/augment (read-int32)
+      (read-value integer?))
+    
+    (define/augment (read-int64)
+      (read-value integer?))
+    
+    (define/augment (read-double)
+      (read-value flonum?))
+    
+    (define/augment (read-string)
+      (read-value string?))
+
+    (define/private (write-value v)
+      (send output-transport write v)
+      (send output-transport write-byte inter-expression-space))
+
+    (define/private (read-value type-predicate?)
+      (log-thrift-debug "~a:read-value" (protocol-id-string *protocol*))
+      (define v (send input-transport read))
+      (cond
+        [(type-predicate? v)
+         (define spacer (send input-transport read-byte))
+         (cond
+           [(equal? spacer inter-expression-space)
+            v]
+           [else
+            (log-thrift-error "unexpected spacer: ~a" spacer)
+            (raise (decoding-error (current-continuation-marks) spacer))])]
+        [else
+         (log-thrift-error "~a not-a ~a" v type-predicate?)
+         (raise (invalid-value-type (current-continuation-marks) v))]))))
+
+(define (make-s-expression-protocol in-transport out-transport)
+  (make-object s-expression-protocol% *protocol* in-transport out-transport))

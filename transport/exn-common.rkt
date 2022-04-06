@@ -19,3 +19,9 @@
 
 (define (permission-error-write c)
   (exn:thrift:transport "write permission denied" c 203))
+
+(define (not-open-for-input c)
+  (exn:thrift:transport "port not open for input" c 204))
+
+(define (not-open-for-output c)
+  (exn:thrift:transport "port not open for output" c 205))

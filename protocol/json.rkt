@@ -12,14 +12,15 @@
  (contract-out
   
   [make-json-encoder
-   (-> transport? (or/c encoder? #f))]
+   (-> transport? (or/c protocol? #f))]
   
   [make-json-decoder
-   (-> transport? (or/c decoder? #f))]))
+   (-> transport? (or/c protocol? #f))]))
 
 ;; ---------- Requirements
 
 (require racket/bool
+         racket/class
          racket/format
          racket/string
          net/base64
@@ -96,57 +97,111 @@
 (define *protocol*
   (protocol-id "simple-json" 0 1))
 
-(define (make-json-encoder transport)
-  (define state (json-state #f '()))
-  (encoder
-   (protocol-id-string *protocol*)
-   (λ (header) (write-message-begin transport state header))
-   (λ () (write-message-end transport state))
-   (λ (name) (write-struct-begin transport state name))
-   (λ () (write-struct-end transport state))
-   (λ (header) (write-field-begin transport state header))
-   (λ () (write-field-end transport state))
-   (λ () (no-op-encoder "field-stop"))
-   (λ (header) (write-map-begin transport state header))
-   (λ () (write-map-end transport state))
-   (λ (header) (write-list-begin transport state header))
-   (λ () (write-list-end transport state))
-   (λ (header) (write-list-begin transport state header))
-   (λ () (write-list-end transport state))
-   (λ (v) (write-boolean transport state v))
-   (λ (v) (write-number transport state v))
-   (λ (v) (write-binary transport state v))
-   (λ (v) (write-number transport state v))
-   (λ (v) (write-number transport state v))
-   (λ (v) (write-number transport state v))
-   (λ (v) (write-number transport state v))
-   (λ (v) (write-string transport state v))))
+(define json-protocol%
+  
+  (class protocol%
 
-(define (make-json-decoder transport)
-  (define state (json-state #f '()))
-  (decoder
-   (protocol-id-string *protocol*)
-   (λ () (read-message-begin transport state))
-   (λ () (read-message-end transport state))
-   (λ () (read-struct-begin transport state))
-   (λ () (read-struct-end transport state))
-   (λ () (read-field-begin transport state))
-   (λ () (read-field-end transport state))
-   (λ () (no-op-decoder "field-stop"))
-   (λ () (read-map-begin transport state))
-   (λ () (read-map-end transport state))
-   (λ () (read-list-begin transport state))
-   (λ () (read-list-end transport state))
-   (λ () (read-list-begin transport state))
-   (λ () (read-list-end transport state))
-   (λ () (read-boolean transport state))
-   (λ () (read-number transport state))
-   (λ () (read-binary transport state))
-   (λ () (read-number transport state))
-   (λ () (read-number transport state))
-   (λ () (read-number transport state))
-   (λ () (no-op-decoder "double"))
-   (λ () (read-string transport state))))
+    (super-new [identity *protocol*]
+               [state (json-state #f '())])
+
+    (inherit-field input-transport
+                   output-transport
+                   state)
+
+    (define/augment (message-begin message)
+      ;; [<version>,"<name>",<type>,<sequence>, ...
+      (set-json-state-in-map! state (cons #f (json-state-in-map state)))
+      (send input-transport write-byte json-array-begin)
+      (set-json-state-prefix! state #f)
+      (write-number tport state (protocol-id-version *protocol*))
+      (write-string tport state (message-header-name header))
+      (write-number tport state (message-header-type header))
+      (write-number tport state (message-header-sequence-id header)))
+
+    
+    (define/augment (message-end)
+      (send output-transport flush))
+    
+    (define/augment (struct-begin name))
+ 
+    (define/augment (struct-end))
+    
+    (define/augment (field-begin field))
+ 
+    (define/augment (field-end))
+    
+    (define/augment (field-stop))
+    
+    (define/augment (map-begin map))
+ 
+    (define/augment (map-end))
+    
+    (define/augment (list-begin list))
+ 
+    (define/augment (list-end))
+    
+    (define/augment (set-begin set))
+ 
+    (define/augment (set-end))
+    
+    (define/augment (boolean value))
+ 
+    (define/augment (byte value))
+ 
+    (define/augment (bytes value))
+ 
+    (define/augment (int16 value))
+ 
+    (define/augment (int32 value))
+ 
+    (define/augment (int64 value))
+ 
+    (define/augment (double value))
+ 
+    (define/augment (string value))
+ 
+    ;; Read API
+    (define/augment (message-begin message-header? #f))
+    
+    (define/augment (message-end void? (void)))
+    
+    (define/augment (struct-begin string? ""))
+ 
+    (define/augment (struct-end void? (void)))
+    
+    (define/augment (field-begin field-header? #f))
+ 
+    (define/augment (field-end void? (void)))
+    
+    (define/augment (field-stop void? (void)))
+    
+    (define/augment (map-begin map-header? #f))
+ 
+    (define/augment (map-end void? (void)))
+    
+    (define/augment (list-begin list-header? #f))
+ 
+    (define/augment (list-end void? (void)))
+    
+    (define/augment (set-begin list-header? #f))
+ 
+    (define/augment (set-end void? (void)))
+    
+    (define/augment (boolean boolean? #f))
+ 
+    (define/augment (byte byte? 0))
+ 
+    (define/augment (bytes bytes? #""))
+ 
+    (define/augment (int16 integer? 0))
+ 
+    (define/augment (int32 integer? 0))
+ 
+    (define/augment (int64 integer? 0))
+ 
+    (define/augment (double flonum? 0.0))
+ 
+    (define/augment (string string? ""))))
 
 ;; ---------- Internal values/types
 
@@ -185,17 +240,6 @@
    [in-map #:mutable]))
 
 ;; ---------- Internal procedures read/write
-
-;; [<version>,"<name>",<type>,<sequence>, ...
-(define (write-message-begin tport state header)
-  (log-thrift-debug "~a:write-message-begin: ~a" (protocol-id-string *protocol*) header)
-  (set-json-state-in-map! state (cons #f (json-state-in-map state)))
-  (transport-write-byte tport json-array-begin)
-  (set-json-state-prefix! state #f)
-  (write-number tport state (protocol-id-version *protocol*))
-  (write-string tport state (message-header-name header))
-  (write-number tport state (message-header-type header))
-  (write-number tport state (message-header-sequence-id header)))
 
 (define (read-message-begin tport state)
   (log-thrift-debug "~a:read-message-begin" (protocol-id-string *protocol*))

@@ -19,11 +19,14 @@
 
 ;; ---------- Requirements
 
-(require thrift/transport/common
+(require racket/class
+         thrift/transport/common
          thrift/transport/exn-common
          thrift/private/logging)
 
 ;; ---------- Implementation
+
+(define *transport-name* "file")
 
 (define (open-input-file-transport file-path)
   (open-file-transport file-path 'input))
@@ -51,5 +54,5 @@
           (open-output-file file-path #:mode 'binary #:exists 'can-update)]))
      (file-stream-buffer-mode port 'block)
      
-     (transport "file" file-path port)]))
+     (make-object positional-transport% *transport-name* file-path port)]))
 

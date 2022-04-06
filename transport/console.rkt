@@ -19,15 +19,16 @@
 
 ;; ---------- Requirements
 
-(require racket/bool
-         thrift/transport/common
-         thrift/private/logging)
+(require racket/class
+         thrift/transport/common)
 
 ;; ---------- Implementation
 
+(define *transport-name* "console")
+
 (define (open-input-console-transport)
-  (transport "console" 'stdin (current-input-port)))
+  (make-object transport% *transport-name* 'stdin (current-input-port)))
 
 (define (open-output-console-transport)
-  (transport "console" 'stdout (current-output-port)))
+  (make-object transport% *transport-name* 'stdout (current-output-port)))
 

@@ -12,6 +12,7 @@
 
 (require (for-syntax
           racket/base
+          racket/class
           racket/list
           racket/sequence
           racket/syntax))
@@ -33,9 +34,9 @@
                    [name-id (format-id #'id "integer->~a" #'id)]
                    [names-id (format-id #'id "~a/names" #'id)])
        #`(begin
-           (require thrift/protocol/common)
+           (require racket/class thrift/protocol/common)
            (define (decode-id decoder)
-             (decoder-int32 decoder))
+             (send decoder read-int32))
            #,@(let* ([first-integer (syntax->datum #'start)]
                      [enum-list (syntax->list #'(enum-id ...))]
                      [integers (sequence->list (in-range first-integer (add1 (length enum-list))))]
